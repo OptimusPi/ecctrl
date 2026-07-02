@@ -8,6 +8,7 @@ import { useCustomGravity } from "../src/gravity";
 import { TimeControl } from "../src/time";
 import EcctrlWrapper from "./EcctrlWrapper";
 import { TestMap } from "./map/TestMap";
+import { Crouton } from "./Crouton";
 
 export default function Experience() {
   /**
@@ -85,6 +86,9 @@ export default function Experience() {
 
         {/* Testing map */}
         <TestMap name="TestMapGroup" paused={pausedPhysics} timeScale={timeScale} />
+
+        {/* 🍞 Crouton waits by The 67. Present #3. She missed you. */}
+        <Crouton />
       </Physics>
     </>
   );

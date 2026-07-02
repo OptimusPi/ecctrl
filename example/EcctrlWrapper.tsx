@@ -9,6 +9,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useCallback, useState, useMemo, useLayoutEffect, type RefObject } from "react";
 import { button, useControls, folder } from "leva";
 import AnimatedCharacterModel from "./AnimatedCharacterModel";
+import { DriverSlop } from "./DriverSlop";
 import { BallCollider, CuboidCollider, CylinderCollider, MeshCollider } from "@react-three/rapier";
 import { CapsuleCahracterModel } from "./CapsuleCharacterModel";
 import { type GLTF } from 'three-stdlib'
@@ -921,6 +922,13 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                     : <CapsuleCahracterModel position={[0, -0.6, 0]} />
                 }
             </Ecctrl>}
+
+            {/* The driver does not disappear — she rattles. A hip-belted ragdoll
+                flops around whichever vehicle you're driving. Comedy is physics. */}
+            {activeController === "vehicle1" && <DriverSlop vehicle={vehicle1Ref} seat={[0, 1.0, 0]} />}
+            {activeController === "vehicle2" && <DriverSlop vehicle={vehicle2Ref} seat={[0, 0.9, -0.4]} />}
+            {activeController === "vehicle3" && <DriverSlop vehicle={vehicle3Ref} seat={[0, -0.2, 0]} />}
+            {activeController === "vehicle4" && <DriverSlop vehicle={vehicle4Ref} seat={[0, 0.9, -0.3]} />}
 
             {/* Ecctrl vehicle controls */}
             {/* Vehicle 1 */}
