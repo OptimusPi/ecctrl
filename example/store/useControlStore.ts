@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ContorlType = "ecctrl" | "vehicle1" | "vehicle2" | "vehicle3";
+export type ContorlType = "ecctrl" | "vehicle1" | "vehicle2" | "vehicle3" | "vehicle4";
 export type VehicleAccessTargetType = {
   controller: Exclude<ContorlType, "ecctrl">;
   label: string;

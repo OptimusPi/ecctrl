@@ -59,6 +59,11 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
     const ableToAccessVehicle3 = useRef(false)
     const vehicle3InitPosition = useMemo(() => new THREE.Vector3(0, 3, -55), [])
     const vehicle3InitRotation = useMemo(() => new THREE.Vector3(0, Math.PI, 0), [])
+    // Vehicle 4 — "The 67", box-built meme car (see JSX below); reuses Vehicle 1's physics config
+    const vehicle4Ref = useRef<EcctrlVehicleHandle | null>(null);
+    const ableToAccessVehicle4 = useRef(false)
+    const vehicle4InitPosition = useMemo(() => new THREE.Vector3(10, 2, -60), [])
+    const vehicle4InitRotation = useMemo(() => new THREE.Vector3(0, Math.PI / 2, 0), [])
 
     const updateVehicleAccessTarget = useCallback(() => {
         if (activeController !== "ecctrl") {
@@ -72,6 +77,8 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
             setVehicleAccessTarget({ controller: "vehicle2", label: "Vehicle 2" });
         } else if (ableToAccessVehicle3.current) {
             setVehicleAccessTarget({ controller: "vehicle3", label: "Drone" });
+        } else if (ableToAccessVehicle4.current) {
+            setVehicleAccessTarget({ controller: "vehicle4", label: "The 67" });
         } else {
             setVehicleAccessTarget(null);
         }
@@ -123,6 +130,11 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                 setActiveController("vehicle3");
                 setVehicleAccessTarget(null);
                 ableToAccessVehicle3.current = false;
+            } else if (ableToAccessVehicle4.current) {
+                console.log("Entering The 67");
+                setActiveController("vehicle4");
+                setVehicleAccessTarget(null);
+                ableToAccessVehicle4.current = false;
             }
             return;
         }
@@ -153,6 +165,16 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                 if (vehicle3Ref.current) {
                     console.log(`Exiting Vehicle 3`);
                     computeExitTransform(vehicle3Ref.current, vehicle3Ref.current.upAxis, 1.5);
+                    setRespawnPos(playerExitPos.current);
+                    setRespawnRot(playerExitRot.current);
+                    setActiveController("ecctrl");
+                    setVehicleAccessTarget(null);
+                }
+                break;
+            case "vehicle4":
+                if (vehicle4Ref.current) {
+                    console.log(`Exiting The 67`);
+                    computeExitTransform(vehicle4Ref.current, vehicle4Ref.current.bodyXAxis, 1.5);
                     setRespawnPos(playerExitPos.current);
                     setRespawnRot(playerExitRot.current);
                     setActiveController("ecctrl");
@@ -765,6 +787,24 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                     })
                 }
                 break;
+            case "vehicle4":
+                if (vehicle4Ref.current && vehicle4Ref.current.body) {
+                    // Update camera follow target
+                    cameraTarget.current.copy(vehicle4Ref.current.currPos).addScaledVector(vehicle4Ref.current.bodyYAxis, 0.5)
+                    // Update camera up direction
+                    cameraUp.current.copy(vehicle4Ref.current.upAxis)
+
+                    // Update The 67 movement based on keyPress/joystick/virtualButton
+                    vehicle4Ref.current.setMovement({
+                        forward: keys.W || keys.Up || buttonState.current.b3,
+                        backward: keys.S || keys.Down || buttonState.current.b1,
+                        steerLeft: keys.A || keys.Left,
+                        steerRight: keys.D || keys.Right,
+                        joystickL: joystickLState.current,
+                        brake: keys.Space || buttonState.current.b2,
+                    })
+                }
+                break;
             case "vehicle3":
                 if (vehicle3Ref.current && vehicle3Ref.current.body) {
                     // Update camera follow target
@@ -832,6 +872,7 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
             let vehicleRef;
             if (activeController === "vehicle1") vehicleRef = vehicle1Ref;
             else if (activeController === "vehicle2") vehicleRef = vehicle2Ref;
+            else if (activeController === "vehicle4") vehicleRef = vehicle4Ref;
             else vehicleRef = vehicle3Ref;
 
             // Apply camera rotation only if camera is not in action
@@ -1009,6 +1050,99 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                     onIntersectionExit={(e) => {
                         if (e.colliderObject && e.colliderObject.name === "character-capsule-collider") {
                             ableToAccessVehicle3.current = false;
+                            updateVehicleAccessTarget();
+                        }
+                    }}
+                />
+            </EcctrlVehicle >
+
+            {/* Vehicle 4 — "The 67". Box-built meme car, N64 quality on purpose.
+                Shares Vehicle 1's engine/wheel physics (same leva panels tune both). */}
+            <EcctrlVehicle ref={vehicle4Ref} {...EcctrlVehicle1Settings} carConfig={EcctrlVehicle1CarConfig}
+                enable={!paused && EcctrlVehicle1Settings.enable}
+                position={[vehicle4InitPosition.x, vehicle4InitPosition.y, vehicle4InitPosition.z]}
+                rotation={[vehicle4InitRotation.x, vehicle4InitRotation.y, vehicle4InitRotation.z]} >
+                {/* Body collider */}
+                <CuboidCollider args={[0.9, 0.35, 1.7]} position={[0, 0.15, 0]} density={200} />
+                {/* Chassis */}
+                <mesh castShadow receiveShadow position={[0, 0.05, 0]}>
+                    <boxGeometry args={[1.7, 0.5, 3.2]} />
+                    <meshStandardMaterial color="#ff2975" flatShading />
+                </mesh>
+                {/* Cabin */}
+                <mesh castShadow position={[0, 0.5, -0.3]}>
+                    <boxGeometry args={[1.3, 0.5, 1.5]} />
+                    <meshStandardMaterial color="#2bd9fe" flatShading />
+                </mesh>
+                {/* Racing stripe (regulation meme width) */}
+                <mesh position={[0, 0.31, 0.8]}>
+                    <boxGeometry args={[0.4, 0.02, 1.6]} />
+                    <meshStandardMaterial color="#ffffff" flatShading />
+                </mesh>
+                {/* Comically oversized spoiler */}
+                <mesh castShadow position={[0, 0.85, -1.45]}>
+                    <boxGeometry args={[1.9, 0.08, 0.5]} />
+                    <meshStandardMaterial color="#1a1a2e" flatShading />
+                </mesh>
+                <mesh position={[0.6, 0.5, -1.45]}>
+                    <boxGeometry args={[0.08, 0.65, 0.12]} />
+                    <meshStandardMaterial color="#1a1a2e" flatShading />
+                </mesh>
+                <mesh position={[-0.6, 0.5, -1.45]}>
+                    <boxGeometry args={[0.08, 0.65, 0.12]} />
+                    <meshStandardMaterial color="#1a1a2e" flatShading />
+                </mesh>
+                {/* Headlights */}
+                <mesh position={[0.55, 0.1, 1.61]}>
+                    <boxGeometry args={[0.3, 0.15, 0.05]} />
+                    <meshStandardMaterial color="#fff9b0" emissive="#fff9b0" emissiveIntensity={2} />
+                </mesh>
+                <mesh position={[-0.55, 0.1, 1.61]}>
+                    <boxGeometry args={[0.3, 0.15, 0.05]} />
+                    <meshStandardMaterial color="#fff9b0" emissive="#fff9b0" emissiveIntensity={2} />
+                </mesh>
+
+                {/* Shape cast wheels — box-car spec, same physics props as Vehicle 1 */}
+                <ShapeCastWheel {...EcctrlVehicle1WheelProps} enable={!paused} steerWheel brakeWheel driveWheel
+                    position={[0.88, 0, 1.15]} >
+                    <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                        <cylinderGeometry args={[0.5, 0.5, 0.35, 10]} />
+                        <meshStandardMaterial color="#1a1a2e" flatShading />
+                    </mesh>
+                </ShapeCastWheel>
+                <ShapeCastWheel {...EcctrlVehicle1WheelProps} enable={!paused} steerWheel brakeWheel driveWheel
+                    position={[-0.88, 0, 1.15]} >
+                    <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                        <cylinderGeometry args={[0.5, 0.5, 0.35, 10]} />
+                        <meshStandardMaterial color="#1a1a2e" flatShading />
+                    </mesh>
+                </ShapeCastWheel>
+                <ShapeCastWheel {...EcctrlVehicle1WheelProps} enable={!paused} driveWheel brakeWheel
+                    position={[0.88, 0, -1.15]} >
+                    <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                        <cylinderGeometry args={[0.5, 0.5, 0.35, 10]} />
+                        <meshStandardMaterial color="#1a1a2e" flatShading />
+                    </mesh>
+                </ShapeCastWheel>
+                <ShapeCastWheel {...EcctrlVehicle1WheelProps} enable={!paused} driveWheel brakeWheel
+                    position={[-0.88, 0, -1.15]} >
+                    <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                        <cylinderGeometry args={[0.5, 0.5, 0.35, 10]} />
+                        <meshStandardMaterial color="#1a1a2e" flatShading />
+                    </mesh>
+                </ShapeCastWheel>
+
+                {/* Interactive sensor */}
+                <CylinderCollider sensor args={[0.4, 1.6]} position={[0, 0.1, 0]} mass={0}
+                    onIntersectionEnter={(e) => {
+                        if (e.colliderObject && e.colliderObject.name === "character-capsule-collider") {
+                            ableToAccessVehicle4.current = true;
+                            updateVehicleAccessTarget();
+                        }
+                    }}
+                    onIntersectionExit={(e) => {
+                        if (e.colliderObject && e.colliderObject.name === "character-capsule-collider") {
+                            ableToAccessVehicle4.current = false;
                             updateVehicleAccessTarget();
                         }
                     }}

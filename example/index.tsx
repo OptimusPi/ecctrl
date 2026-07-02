@@ -13,6 +13,9 @@ import { ControlHints } from "./ui/ControlHints";
 import { InteractionPrompt } from "./ui/InteractionPrompt";
 import { CopyrightNotice } from "./ui/CopyrightNotice";
 import { useIsTouchDevice } from "./ui/useIsTouchDevice";
+import { MCPProvider } from "r3f-mcp";
+import { useSecretCode } from "./dressup/useSecretCode";
+import { DressUpMode } from "./dressup/DressUpMode";
 
 const root = ReactDOM.createRoot(document.querySelector("#root")!);
 
@@ -41,27 +44,38 @@ const JoystickControls = () => {
   );
 };
 
-root.render(
-  <>
-    <Leva collapsed />
-    <JoystickControls />
-    <InteractionPrompt />
-    <ControlHints />
-    <CopyrightNotice />
-    <Canvas
-      shadows={{ type: THREE.PCFShadowMap }}
-      camera={{
-        fov: 75,
-        near: 0.1,
-        far: 1000,
-        position: [0, 0, -4],
-      }}
-    >
-      <Suspense fallback={null}>
-        <Bvh firstHitOnly >
-          <Experience />
-        </Bvh>
-      </Suspense>
-    </Canvas>
-  </>
-);
+const Root = () => {
+  // Secret mode: type "pifreak loves you!" anywhere in the game. Esc returns.
+  const [dressUp] = useSecretCode("pifreak loves you!");
+
+  return (
+    <>
+      <Leva collapsed />
+      <JoystickControls />
+      <InteractionPrompt />
+      <ControlHints />
+      <CopyrightNotice />
+      <Canvas
+        shadows={{ type: THREE.PCFShadowMap }}
+        gl={{ preserveDrawingBuffer: true }}
+        camera={{
+          fov: 75,
+          near: 0.1,
+          far: 1000,
+          position: [0, 0, -4],
+        }}
+      >
+        <MCPProvider>
+          <Suspense fallback={null}>
+            <Bvh firstHitOnly >
+              <Experience />
+            </Bvh>
+          </Suspense>
+        </MCPProvider>
+      </Canvas>
+      {dressUp && <DressUpMode />}
+    </>
+  );
+};
+
+root.render(<Root />);
