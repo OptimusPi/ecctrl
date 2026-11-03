@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import * as path from "node:path";
 import react from "@vitejs/plugin-react";
 import ssl from '@vitejs/plugin-basic-ssl'
+import { viteWebMcpPlugin } from "./viteWebMcpPlugin.js";
 
 const isCodeSandbox =
   "SANDBOX_URL" in process.env || "CODESANDBOX_HOST" in process.env;
@@ -26,8 +27,12 @@ const licenseBannerPlugin = () => ({
   },
 });
 
+const useHttps = process.env.VITE_HTTPS === "true";
+
 const dev = defineConfig({
-  plugins: [react(), ssl()],
+  plugins: useHttps
+    ? [react(), viteWebMcpPlugin(), ssl()]
+    : [react(), viteWebMcpPlugin()],
   root: "example/",
   publicDir: "../public/",
   base: "./",
@@ -57,6 +62,8 @@ const build = defineConfig({
         curves: "src/curves.ts",
         leva: "src/leva.ts",
         utils: "src/utils.ts",
+        simready: "src/simready.ts",
+        webmcp: "src/webmcp.ts",
         all: "src/all.ts",
       },
       fileName: (format, entryName) =>

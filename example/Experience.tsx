@@ -8,6 +8,7 @@ import { useCustomGravity } from "../src/gravity";
 import { TimeControl } from "../src/time";
 import EcctrlWrapper from "./EcctrlWrapper";
 import { TestMap } from "./map/TestMap";
+import { usePeerStore } from "./webmcp/usePeerStore";
 
 export default function Experience() {
   /**
@@ -56,6 +57,13 @@ export default function Experience() {
     { collapsed: true }
   );
 
+  useEffect(() => {
+    usePeerStore.getState().setWorldSettingsCallback((patch) => {
+      setWorldSettings(patch);
+    });
+    return () => usePeerStore.getState().setWorldSettingsCallback(null);
+  }, [setWorldSettings]);
+
   /**
    * Delay physics activate
    */
@@ -80,7 +88,11 @@ export default function Experience() {
 
         <KeyboardControls map={EcctrlKeyboardMap}>
           {/* Ecctrl controller wrapper, include: camera control, vehicle control, animation control  */}
-          <EcctrlWrapper paused={pausedPhysics} timeScale={timeScale} />
+          <EcctrlWrapper
+            paused={pausedPhysics}
+            timeScale={timeScale}
+            defaultGravityField={gravityField}
+          />
         </KeyboardControls>
 
         {/* Testing map */}

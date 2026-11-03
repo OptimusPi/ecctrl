@@ -1,11 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { viteWebMcpPlugin } from "./viteWebMcpPlugin.js";
 
 const isCodeSandbox =
   "SANDBOX_URL" in process.env || "CODESANDBOX_HOST" in process.env;
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), viteWebMcpPlugin()],
   root: "example/",
   publicDir: "../public/",
   base: "./",

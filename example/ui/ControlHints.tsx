@@ -52,9 +52,18 @@ const CONTROL_HINTS: Record<"ecctrl" | "vehicle" | "drone", HintPreset> = {
   },
 };
 
-const getPresetKey = (controller: ContorlType) => {
-  if (controller === "vehicle3") return "drone";
-  if (controller === "vehicle1" || controller === "vehicle2") return "vehicle";
+const getPresetKey = (
+  controller: ContorlType,
+  dynamicMode?: "car" | "drone"
+) => {
+  if (controller === "vehicle3" || dynamicMode === "drone") return "drone";
+  if (
+    controller === "vehicle1" ||
+    controller === "vehicle2" ||
+    dynamicMode === "car"
+  ) {
+    return "vehicle";
+  }
   return "ecctrl";
 };
 
@@ -66,9 +75,12 @@ const isEditableTarget = (target: EventTarget | null) => {
 
 export function ControlHints() {
   const activeController = useControlStore((state) => state.activeController);
+  const dynamicMode = useControlStore(
+    (state) => state.dynamicVehicles[state.activeController]?.mode
+  );
   const isTouchDevice = useIsTouchDevice();
   const [pressedKeys, setPressedKeys] = useState<Set<string>>(() => new Set());
-  const preset = CONTROL_HINTS[getPresetKey(activeController)];
+  const preset = CONTROL_HINTS[getPresetKey(activeController, dynamicMode)];
 
   const visibleCodes = useMemo(() => {
     const codes = new Set<string>();

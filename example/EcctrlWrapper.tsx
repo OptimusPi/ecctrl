@@ -6,20 +6,23 @@ import { useButtonStore, useJoystickStore } from "../src/input";
 import { EcctrlVehicle, ShapeCastWheel, ThrustPropeller, type DroneConfigType, type EcctrlVehicleHandle } from "../src/vehicle";
 import { CurveEditorPlugin } from "../src/leva";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useCallback, useState, useMemo, useLayoutEffect, type RefObject } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo, useLayoutEffect, Suspense, type RefObject } from "react";
 import { button, useControls, folder } from "leva";
 import AnimatedCharacterModel from "./AnimatedCharacterModel";
 import { BallCollider, CuboidCollider, CylinderCollider, MeshCollider } from "@react-three/rapier";
 import { CapsuleCahracterModel } from "./CapsuleCharacterModel";
 import { type GLTF } from 'three-stdlib'
 import { useControlStore } from "./store/useControlStore";
+import { SimReadyToolGun } from "./toolgun/SimReadyToolGun";
+import { PeerWorldBridge } from "./webmcp/PeerWorldBridge";
 
 type EcctrlWrapperProps = {
     paused?: boolean;
     timeScale?: number | RefObject<number>;
+    defaultGravityField?: (pos: THREE.Vector3) => THREE.Vector3;
 }
 
-export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlWrapperProps) {
+export default function EcctrlWrapper({ paused = false, timeScale = 1, defaultGravityField }: EcctrlWrapperProps) {
     /**
      * Three.js scene reference
      */
@@ -66,7 +69,13 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
             return;
         }
 
-        if (ableToAccessVehicle1.current) {
+        const ctrlStore = useControlStore.getState();
+        const dynNearbyId = ctrlStore.nearbyDynamicVehicleId;
+        const dynEntry = dynNearbyId ? ctrlStore.dynamicVehicles[dynNearbyId] : undefined;
+
+        if (dynEntry) {
+            setVehicleAccessTarget({ controller: dynEntry.id, label: dynEntry.label });
+        } else if (ableToAccessVehicle1.current) {
             setVehicleAccessTarget({ controller: "vehicle1", label: "Vehicle 1" });
         } else if (ableToAccessVehicle2.current) {
             setVehicleAccessTarget({ controller: "vehicle2", label: "Vehicle 2" });
@@ -108,7 +117,15 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
     const handleVehicleAccess = useCallback(() => {
         // ENTERING A VEHICLE
         if (activeController === "ecctrl") {
-            if (ableToAccessVehicle1.current) {
+            const ctrlStore = useControlStore.getState();
+            const dynNearbyId = ctrlStore.nearbyDynamicVehicleId;
+            const dynEntry = dynNearbyId ? ctrlStore.dynamicVehicles[dynNearbyId] : undefined;
+
+            if (dynEntry) {
+                setActiveController(dynEntry.id);
+                setVehicleAccessTarget(null);
+                ctrlStore.setNearbyDynamicVehicle(null);
+            } else if (ableToAccessVehicle1.current) {
                 console.log("Entering Vehicle 1");
                 setActiveController("vehicle1");
                 setVehicleAccessTarget(null);
@@ -124,6 +141,21 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                 setVehicleAccessTarget(null);
                 ableToAccessVehicle3.current = false;
             }
+            return;
+        }
+
+        // EXITING A DYNAMIC SIMREADY VEHICLE
+        if (activeController.startsWith("simveh:")) {
+            const dynEntry = useControlStore.getState().dynamicVehicles[activeController];
+            const dynHandle = dynEntry?.getHandle();
+            if (dynHandle) {
+                const exitDir = dynEntry.mode === "drone" ? dynHandle.upAxis : dynHandle.bodyXAxis;
+                computeExitTransform(dynHandle, exitDir, 1.5);
+                setRespawnPos(playerExitPos.current);
+                setRespawnRot(playerExitRot.current);
+            }
+            setActiveController("ecctrl");
+            setVehicleAccessTarget(null);
             return;
         }
 
@@ -192,7 +224,11 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
     useEffect(() => {
         const unsubscribeAccess = subscribeKeys(
             (state) => state.F,
-            (value) => { if (value) handleVehicleAccess() }
+            (value) => {
+                const el = document.activeElement;
+                if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+                if (value) handleVehicleAccess();
+            }
         )
         return unsubscribeAccess;
     }, [handleVehicleAccess]);
@@ -699,9 +735,14 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
 
     useFrame((state, delta) => {
         /**
-         * Getting all the useful keys from useKeyboardControls
+         * Getting all the useful keys from useKeyboardControls (suppressed while typing in Peer Chat)
          */
-        const keys = getKeys()
+        const rawKeys = getKeys()
+        const activeEl = document.activeElement
+        const isTyping = activeEl instanceof HTMLInputElement || activeEl instanceof HTMLTextAreaElement
+        const keys = isTyping
+            ? { W: false, S: false, A: false, D: false, Space: false, Shift: false, F: false, Up: false, Down: false, Left: false, Right: false }
+            : rawKeys
 
         /**
          * Toggle controller state
@@ -787,10 +828,42 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                     })
                 }
                 break;
-            default:
-                cameraTarget.current.set(0, 0, 0)
-                cameraUp.current.set(0, 1, 0)
+            default: {
+                const dynEntry = useControlStore.getState().dynamicVehicles[activeController];
+                const dynHandle = dynEntry?.getHandle();
+                if (dynEntry && dynHandle && dynHandle.body) {
+                    cameraTarget.current.copy(dynHandle.currPos).addScaledVector(dynHandle.bodyYAxis, 0.5);
+                    cameraUp.current.copy(dynHandle.upAxis);
+
+                    if (dynEntry.mode === "drone") {
+                        dynHandle.setMovement({
+                            throttleUp: keys.W,
+                            throttleDown: keys.S,
+                            yawLeft: keys.A,
+                            yawRight: keys.D,
+                            pitchForward: keys.Up,
+                            pitchBackward: keys.Down,
+                            rollLeft: keys.Left,
+                            rollRight: keys.Right,
+                            joystickL: joystickLState.current,
+                            joystickR: joystickRState.current,
+                        });
+                    } else {
+                        dynHandle.setMovement({
+                            forward: keys.W || keys.Up || buttonState.current.b3,
+                            backward: keys.S || keys.Down || buttonState.current.b1,
+                            steerLeft: keys.A || keys.Left,
+                            steerRight: keys.D || keys.Right,
+                            joystickL: joystickLState.current,
+                            brake: keys.Space || buttonState.current.b2,
+                        });
+                    }
+                } else {
+                    cameraTarget.current.set(0, 0, 0);
+                    cameraUp.current.set(0, 1, 0);
+                }
                 break;
+            }
         }
 
         // Update camera follow target and up direction
@@ -829,17 +902,18 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
          */
         if (activeController !== "ecctrl" && cameraControlsRef.current && followPlayer) {
             // Get reference to active vehicle
-            let vehicleRef;
-            if (activeController === "vehicle1") vehicleRef = vehicle1Ref;
-            else if (activeController === "vehicle2") vehicleRef = vehicle2Ref;
-            else vehicleRef = vehicle3Ref;
+            let activeVehicleHandle: EcctrlVehicleHandle | null = null;
+            if (activeController === "vehicle1") activeVehicleHandle = vehicle1Ref.current;
+            else if (activeController === "vehicle2") activeVehicleHandle = vehicle2Ref.current;
+            else if (activeController === "vehicle3") activeVehicleHandle = vehicle3Ref.current;
+            else activeVehicleHandle = useControlStore.getState().dynamicVehicles[activeController]?.getHandle() ?? null;
 
             // Apply camera rotation only if camera is not in action
-            if (vehicleRef.current && cameraControlsRef.current.currentAction === 0) {
+            if (activeVehicleHandle && cameraControlsRef.current.currentAction === 0) {
                 // Get current camera direction projected on vehicle horizontal plane
                 state.camera.getWorldDirection(cameraCurrDir.current).projectOnPlane(cameraUp.current).normalize();
                 // Get target camera direction, aligned with vehicle body direction
-                cameraFinalDir.current.copy(vehicleRef.current.bodyZAxis).projectOnPlane(cameraUp.current).normalize()
+                cameraFinalDir.current.copy(activeVehicleHandle.bodyZAxis).projectOnPlane(cameraUp.current).normalize()
                 // Calculate rotation angle and sign between current and final direction
                 cameraTurnCrossAxis.current.crossVectors(cameraCurrDir.current, cameraFinalDir.current);
                 let dot = THREE.MathUtils.clamp(cameraCurrDir.current.dot(cameraFinalDir.current), -1, 1);
@@ -1014,6 +1088,27 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                     }}
                 />
             </EcctrlVehicle >
+
+            {/* Garry's Mod + SimReady OpenUSD Physics Tool Gun */}
+            <SimReadyToolGun
+                ecctrlRef={ecctrlRef}
+                cameraControlsRef={cameraControlsRef}
+                paused={paused}
+                onVehicleAccessibilityChange={updateVehicleAccessTarget}
+            />
+
+            {/* Bidirectional W3C WebMCP + Live 3D AI Peer Companion */}
+            <Suspense fallback={null}>
+                <PeerWorldBridge
+                    ecctrlRef={ecctrlRef}
+                    vehicle1Ref={vehicle1Ref}
+                    vehicle2Ref={vehicle2Ref}
+                    vehicle3Ref={vehicle3Ref}
+                    timeScaleRef={typeof timeScale === "object" ? timeScale : undefined}
+                    defaultGravityField={defaultGravityField}
+                    paused={paused}
+                />
+            </Suspense>
         </>
     )
 }

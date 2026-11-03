@@ -90,6 +90,16 @@
       "require": "./dist/utils.cjs",
       "import": "./dist/utils.js"
     },
+    "./simready": {
+      "types": "./dist/simready.d.ts",
+      "require": "./dist/simready.cjs",
+      "import": "./dist/simready.js"
+    },
+    "./webmcp": {
+      "types": "./dist/webmcp.d.ts",
+      "require": "./dist/webmcp.cjs",
+      "import": "./dist/webmcp.js"
+    },
     "./all": {
       "types": "./dist/all.d.ts",
       "require": "./dist/all.cjs",

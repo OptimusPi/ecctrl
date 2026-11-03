@@ -5,6 +5,7 @@ import { type GLTF } from 'three-stdlib'
 import { useFrame, type ThreeElements } from '@react-three/fiber'
 import { CuboidCollider, CylinderCollider, InstancedRigidBodies, type RapierRigidBody, RigidBody, type InstancedRigidBodyProps, useRapier, BallCollider } from '@react-three/rapier'
 import { useCustomGravity } from '../../src/gravity'
+import { SimReadyShowcase } from './SimReadyShowcase'
 
 type TimeScaleValue = number | RefObject<number>
 
@@ -241,6 +242,9 @@ export function TestMap({ paused = false, timeScale = 1, ...props }: ThreeElemen
             <InstancedRigidBodies ref={blockInstancesRef} instances={blockInstances} density={200}>
                 <instancedMesh castShadow receiveShadow args={[nodes.Box4X6.geometry, variantMaterials[4], blockInstances.length]} count={blockInstances.length} frustumCulled={false} />
             </InstancedRigidBodies>
+
+            {/* SimReady OpenUSD Showcase (.usdz + binary Crate .usdc, zero COOP/SAB) */}
+            <SimReadyShowcase paused={paused} timeScale={timeScale} />
         </group>
     )
 }

@@ -13,15 +13,25 @@ import { ControlHints } from "./ui/ControlHints";
 import { InteractionPrompt } from "./ui/InteractionPrompt";
 import { CopyrightNotice } from "./ui/CopyrightNotice";
 import { useIsTouchDevice } from "./ui/useIsTouchDevice";
+import { ToolGunHUD } from "./toolgun/ToolGunHUD";
+import { PeerCommsHUD } from "./webmcp/PeerCommsHUD";
 
 const root = ReactDOM.createRoot(document.querySelector("#root")!);
 
 const JoystickControls = () => {
   const activeController = useControlStore(state => state.activeController);
+  const dynamicMode = useControlStore(
+    state => state.dynamicVehicles[state.activeController]?.mode
+  );
   const isTouchScreen = useIsTouchDevice();
+  const isDrone = activeController === "vehicle3" || dynamicMode === "drone";
+  const isCar =
+    activeController === "vehicle1" ||
+    activeController === "vehicle2" ||
+    dynamicMode === "car";
   const buttonLabels = activeController === "ecctrl"
     ? { b1: "Run", b2: "Jump", b4: "Enter" }
-    : activeController === "vehicle3"
+    : isDrone
       ? { b4: "Exit" }
       : { b1: "Rev", b2: "Brake", b3: "Gas", b4: "Exit" };
 
@@ -30,10 +40,10 @@ const JoystickControls = () => {
       {isTouchScreen && (
         <>
           <Joystick id="left" joystickWrapperStyle={{ left: '0', bottom: '0' }}/>
-          {activeController === "vehicle3" && <Joystick id="right" joystickWrapperStyle={{ right: '0', bottom: '0' }} />}
-          {activeController !== "vehicle3" && <VirtualButton id="b1" label={buttonLabels.b1} buttonWrapperStyle={{ right: '100px', bottom: '30px' }} />}
-          {activeController !== "vehicle3" && <VirtualButton id="b2" label={buttonLabels.b2} buttonWrapperStyle={{ right: '40px', bottom: activeController === "ecctrl" ? '90px' : '70px' }} />}
-          {(activeController === "vehicle1" || activeController === "vehicle2") && <VirtualButton id="b3" label={buttonLabels.b3} buttonWrapperStyle={{ right: '100px', bottom: '110px' }} />}
+          {isDrone && <Joystick id="right" joystickWrapperStyle={{ right: '0', bottom: '0' }} />}
+          {!isDrone && <VirtualButton id="b1" label={buttonLabels.b1} buttonWrapperStyle={{ right: '100px', bottom: '30px' }} />}
+          {!isDrone && <VirtualButton id="b2" label={buttonLabels.b2} buttonWrapperStyle={{ right: '40px', bottom: activeController === "ecctrl" ? '90px' : '70px' }} />}
+          {isCar && <VirtualButton id="b3" label={buttonLabels.b3} buttonWrapperStyle={{ right: '100px', bottom: '110px' }} />}
           <VirtualButton id="b4" label={buttonLabels.b4} buttonWrapperStyle={{ right: '40px', bottom: '200px' }} />
         </>
       )}
@@ -44,6 +54,8 @@ const JoystickControls = () => {
 root.render(
   <>
     <Leva collapsed />
+    <ToolGunHUD />
+    <PeerCommsHUD />
     <JoystickControls />
     <InteractionPrompt />
     <ControlHints />

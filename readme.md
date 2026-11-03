@@ -43,6 +43,7 @@ This is the best way to test the character controller, custom gravity, cars, dro
 - [Leva Curve Editor](#leva-curve-editor)
 - [Time Control](#time-control)
 - [Touch Input](#touch-input)
+- [SimReady OpenUSD](#simready-openusd)
 - [Performance Notes](#performance-notes)
 - [Support](#support)
 - [Contributing](#contributing)
@@ -135,6 +136,7 @@ The character floats with spring and damping, pushes back on the object below, f
 | Leva curve editor | Optional draggable curve editor for tuning points, tangents, and weights |
 | Time control | Pause and slow down the physics world for bullet-time style control |
 | Touch controls | DOM-based joystick and virtual buttons that can be replaced by your own UI |
+| SimReady OpenUSD | Pure-JS `.usd`/`.usda`/`.usdc`/`.usdz` loader + `UsdPhysics` bridge for Rapier & Ecctrl without COOP/COEP or `SharedArrayBuffer` |
 
 ## Module Imports
 
@@ -150,6 +152,7 @@ import { TimeControl } from "ecctrl/time";
 import { EcctrlAnimationStateController } from "ecctrl/animation";
 import { bakeCurveLUT, evaluateCurveLUT } from "ecctrl/curves";
 import { CurveEditorPlugin } from "ecctrl/leva";
+import { SimReadyStage, SimReadyUSDLoader, useSimReadyUSD } from "ecctrl/simready";
 ```
 
 For prototypes or examples, you can also import everything from `ecctrl/all`.
@@ -684,6 +687,38 @@ You can also bypass the stores and drive a controller directly through its ref:
 ecctrl.current?.setMovement({ forward: true, jump: false });
 vehicle.current?.setMovement({ forward: true, steerLeft: true });
 ```
+
+## SimReady OpenUSD
+
+`ecctrl/simready` bridges Three.js's pure-JavaScript OpenUSD pipeline (`.usd`, `.usda`, binary Crate `.usdc`, and `.usdz` — **no WebAssembly pthreads, no `SharedArrayBuffer`, and no COOP/COEP headers**) with OpenUSD `UsdPhysics` and NVIDIA **SimReady** metadata inside `@react-three/rapier` and Ecctrl:
+
+- **`PhysicsScene`** (`gravityDirection` + `gravityMagnitude`), stage `upAxis` (`"Z"` or `"Y"`), `metersPerUnit`, and `kilogramsPerUnit`
+- **`PhysicsRigidBodyAPI`** (`dynamic` / `kinematicPosition`, initial linear & deg/s angular velocities, `startsAsleep`) and **`PhysicsMassAPI`** (`mass`, `density`, `centerOfMass`, `diagonalInertia`, `principalAxes`)
+- **`PhysicsCollisionAPI`** & **`PhysicsMeshCollisionAPI`** (`Cube`, `Sphere`, `Cylinder`, `Cone`, `Capsule`, and `Mesh` `none` trimesh / `convexHull` / `boundingCube` / `boundingSphere`), automatically hiding `purpose = "guide"` / `"proxy"` collider proxies
+- **`PhysicsMaterialAPI`** (`staticFriction`, `dynamicFriction`, `restitution`, `density`) bound via `material:binding:physics` or `material:binding`
+- **Articulated joints & motors:** `PhysicsFixedJoint`, `PhysicsRevoluteJoint`, `PhysicsPrismaticJoint`, `PhysicsSphericalJoint`, `PhysicsLimitAPI`, and `PhysicsDriveAPI` (`force` / `acceleration` stiffness & velocity drives)
+- **SimReady Semantics:** `SemanticsLabelsAPI:wikidata_qcode` (Wikidata Q-codes) and `SemanticsAPI` class queries via `stageRef.current?.getBodiesBySemantic("Q1065449")`
+
+```tsx
+import { Suspense, useRef } from "react";
+import { SimReadyStage, type SimReadyStageHandle } from "ecctrl/simready";
+
+export function WarehouseScene() {
+  const stageRef = useRef<SimReadyStageHandle>(null);
+
+  return (
+    <Suspense fallback={null}>
+      <SimReadyStage
+        ref={stageRef}
+        url="/simready/warehouse_bay.usdz"
+        enableCustomGravity
+      />
+    </Suspense>
+  );
+}
+```
+
+You can also attach a SimReady asset's visual meshes and compound `UsdPhysics` colliders directly inside an `<EcctrlVehicle>` or `<Ecctrl>` controller via `SimReadyColliderGroup`.
 
 ## Performance Notes
 
