@@ -58,8 +58,8 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
     latFrictionEllipseScale = 1,
     relaxLngRate = 0.05,
     relaxLatRate = 0.1,
-    minLngRelaxCoeff = 0.3,
-    minLatRelaxCoeff = 0.3,
+    minLngRelaxRate = 21.4,
+    minLatRelaxRate = 21.4,
     lngSlipRatioCurveData = { points: [{ x: 0, y: 0, r_out: 1.45 }, { x: 0.25, y: 1, r_in: 0, r_out: 0 }, { x: 1, y: 0.7, r_in: 0 },] },
     latSlipRatioCurveData = { points: [{ x: 0, y: 0, r_out: 1.45 }, { x: 0.15, y: 1, r_in: 0, r_out: 0 }, { x: 1, y: 0.9, r_in: 0 },] },
 
@@ -113,6 +113,7 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
      */
     const effectiveInertia = useRef<number>(0)
     const wheelAngVel = useRef<number>(0)
+    const wasAsleep = useRef<boolean>(false)
     const supportPoint = useRef<THREE.Vector3>(new THREE.Vector3())
     const wheelVolume = useMemo(() => Math.PI * rayShapeR * rayShapeR * (rayShapeH * 2), [rayShapeR, rayShapeH])
     const wheelMass = useMemo(() => wheelModelDensity * wheelVolume, [wheelModelDensity, wheelVolume])
@@ -264,8 +265,8 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
         latFrictionEllipseScale,
         relaxLngRate,
         relaxLatRate,
-        minLngRelaxCoeff,
-        minLatRelaxCoeff,
+        minLngRelaxRate,
+        minLatRelaxRate,
 
         // Moving platform setups
         followPlatform,
@@ -788,15 +789,21 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
         }
 
         // Keep low-speed tires responsive while still allowing speed-based relaxation.
-        let lngCoeff = clamp(Math.max(minLngRelaxCoeff, (lngContactVelAbs / Math.max(relaxLngRate, 1e-6)) * world.timestep), 0, 1);
-        let latCoeff = clamp(Math.max(minLatRelaxCoeff, (latContactVelAbs / Math.max(relaxLatRate, 1e-6)) * world.timestep), 0, 1);
+        // Relax floor as a per-second rate, so tire response is the same at any step size
+        const minLngCoeff = 1 - Math.exp(-minLngRelaxRate * world.timestep)
+        const minLatCoeff = 1 - Math.exp(-minLatRelaxRate * world.timestep)
+        let lngCoeff = clamp(Math.max(minLngCoeff, (lngContactVelAbs / Math.max(relaxLngRate, 1e-6)) * world.timestep), 0, 1);
+        let latCoeff = clamp(Math.max(minLatCoeff, (latContactVelAbs / Math.max(relaxLatRate, 1e-6)) * world.timestep), 0, 1);
         smoothedLngImpulse.current += (desiredLngImpulse.current - smoothedLngImpulse.current) * lngCoeff;
         smoothedLatImpulse.current += (desiredLatImpulse.current - smoothedLatImpulse.current) * latCoeff;
+        // Never overshoot the impulse that stops the wheel, so wheel spin can't flip sign frame to frame
+        if (smoothedLngImpulse.current * desiredLngImpulse.current < 0) smoothedLngImpulse.current = 0
+        else if (Math.abs(smoothedLngImpulse.current) > Math.abs(desiredLngImpulse.current)) smoothedLngImpulse.current = desiredLngImpulse.current
 
         // Apply the friction impulse to the wheel and the contacted body
         lngFrictionImp.current.copy(lngAxis.current).multiplyScalar(smoothedLngImpulse.current)
         latFrictionImp.current.copy(latAxis.current).multiplyScalar(-smoothedLatImpulse.current)
-    }, [wheelMass, wheelInertia, rayShapeR, lowVelThreshold, lngSlipRatioCurve, latSlipRatioCurve, lngFrictionEllipseScale, latFrictionEllipseScale, relaxLngRate, relaxLatRate, minLngRelaxCoeff, minLatRelaxCoeff])
+    }, [wheelMass, wheelInertia, rayShapeR, lowVelThreshold, lngSlipRatioCurve, latSlipRatioCurve, lngFrictionEllipseScale, latFrictionEllipseScale, relaxLngRate, relaxLatRate, minLngRelaxRate, minLatRelaxRate])
 
     /**
      * Solve wheel rotation based on drive/brake torque and friction torque
@@ -845,7 +852,7 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
     /**
      * Update debug indicators
      */
-    const updateDebugger = useCallback(() => {
+    const updateDebugger = useCallback((gravityMag: number) => {
         const hasContact = groundDetection === "rayCast" ? rayHit.current : shapeRayHit.current
         vehicleInvertQuat.current.copy(vehicleQuat.current).invert()
         vehicleInvertMatrix.current.copy(vehicleMatrix.current).invert()
@@ -859,7 +866,8 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
             currFloatArrowRef.current.position.copy(shapeCastWheelRef.current.position)
             currFloatArrowDir.current.copy(rayHitPointNormal.current).applyQuaternion(vehicleInvertQuat.current)
             currFloatArrowRef.current.setDirection(currFloatArrowDir.current)
-            const length = hasContact ? wheelSupportForceMag.current * world.timestep * debuggerArrowScale : 0
+            // Draw wheel load (force / g), not impulse, so the arrow doesn't change with step size
+            const length = hasContact ? wheelSupportForceMag.current / gravityMag * debuggerArrowScale : 0
             currFloatArrowRef.current.setLength(length)
         }
         // Current drifting arrow helper
@@ -916,6 +924,19 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
         // Early exit if no vehicle body
         if (!vehicleBody) return
 
+        // On the awake -> asleep edge, clear wheel transients once so leftover spin/friction can't bump the car on wake
+        const isAsleep = vehicleBody.isSleeping()
+        if (isAsleep && !wasAsleep.current) {
+            wheelAngVel.current = 0
+            smoothedLngImpulse.current = 0
+            smoothedLatImpulse.current = 0
+            desiredLngImpulse.current = 0
+            desiredLatImpulse.current = 0
+            lngFrictionImp.current.set(0, 0, 0)
+            latFrictionImp.current.set(0, 0, 0)
+        }
+        wasAsleep.current = isAsleep
+
         // Update vehicle info & wheel info
         updateVehicleInfo(vehicleBody)
 
@@ -935,7 +956,16 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
         isOnMovingObjectDetect(vehicleBody)
 
         // Apply opposite wheel mass to standing object
-        applyMassOnStandCollider()
+        // Skip while asleep: a wakeUp=false impulse on a sleeping body is stored and released on wake
+        if (!isAsleep) applyMassOnStandCollider()
+
+        // Asleep with no throttle: skip friction and rotation math. The cast above still runs,
+        // so platform contact is still detected and can wake the car.
+        if (isAsleep && driveDemand.current === 0) {
+            updateWheelModel()
+            if (debug) updateDebugger(vehicleGravityMag)
+            return
+        }
 
         // Apply opposite tire friction to standing object
         applyFricitonOnStandCollider()
@@ -956,7 +986,7 @@ const ShapeCastWheel: ForwardRefComponent<ShapeCastWheelProps, THREE.Group> = /*
         updateWheelModel()
 
         // Update debug indicators   
-        if (debug) updateDebugger()
+        if (debug) updateDebugger(vehicleGravityMag)
     })
 
     return (
@@ -1118,8 +1148,8 @@ export type ShapeCastWheelProps = ThreeElements['group'] & {
     latFrictionEllipseScale?: number
     relaxLngRate?: number
     relaxLatRate?: number
-    minLngRelaxCoeff?: number
-    minLatRelaxCoeff?: number
+    minLngRelaxRate?: number
+    minLatRelaxRate?: number
     lngSlipRatioCurveData?: CurveData
     latSlipRatioCurveData?: CurveData
 

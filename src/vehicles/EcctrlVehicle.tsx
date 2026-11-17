@@ -133,6 +133,8 @@ const EcctrlVehicle: ForwardRefComponent<EcctrlVehicleProps, EcctrlVehicleHandle
     driveRatio.current = getDriveRatio(gearRatios, gearIndex.current, carControlConfig.finalDriveRatio)
     const engineRPM = useRef(0)
     const shiftCooldownTimer = useRef(0)
+    // Latest throttle input; a sleeping car only wakes on throttle (or platform contact)
+    const driveDemandRef = useRef(0)
     const engineTorqueCurve = useMemo(() => bakeCurveLUT(carControlConfig.engineTorqueCurveData.points, carControlConfig.engineTorqueCurveData.samples ?? 50), [carControlConfig.engineTorqueCurveData]);
     const steerAngleCurve = useMemo(() => bakeCurveLUT(carControlConfig.steerAngleCurveData.points || [], carControlConfig.steerAngleCurveData.samples ?? 50), [carControlConfig.steerAngleCurveData]);
     const maxWheelAngVel = useRef(getMaxWheelAngVel(carControlConfig.engineMaxRPM, driveRatio.current))
@@ -498,6 +500,7 @@ const EcctrlVehicle: ForwardRefComponent<EcctrlVehicleProps, EcctrlVehicleHandle
         const driveIn = clamp((input.forward ? 1 : 0) - (input.backward ? 1 : 0), -1, 1);
         const steerIn = clamp((input.steerLeft ? 1 : 0) - (input.steerRight ? 1 : 0) - (input.joystickL?.x ?? 0), -1, 1);
         const brakeIn = input.brake ? 1 : 0
+        driveDemandRef.current = driveIn
 
         // Apply drive/brake/steer demand to wheels
         wheels.forEach((wheel) => {
@@ -511,15 +514,18 @@ const EcctrlVehicle: ForwardRefComponent<EcctrlVehicleProps, EcctrlVehicleHandle
     const applyWheelImpulse = useCallback((wheels: WheelsInfoType, body: RapierRigidBody) => {
         if (!body) return
 
-        // wake up check: only wake up when any wheel has contact and non-zero velocity surface
+        // Wake check: a sleeping car wakes only on throttle or when a grounded wheel is on a platform.
+        // Brake/steer alone keep it asleep. Collisions and impulses wake it through Rapier itself.
         if (body.isSleeping()) {
-            let shouldWake = false
-            for (const wheel of wheels.values()) {
-                const w = wheel.current
-                if (!w.rayHit) continue
-                if (w.isOnPlatform || Math.abs(w.wheelLinVel) > 1e-4) {
-                    shouldWake = true
-                    break
+            let shouldWake = driveDemandRef.current !== 0
+            if (!shouldWake) {
+                for (const wheel of wheels.values()) {
+                    const w = wheel.current
+                    // Only a platform that is itself awake (actually moving) wakes the car
+                    if (w.rayHit && w.isOnPlatform && w.rayHitBody && !w.rayHitBody.isSleeping()) {
+                        shouldWake = true
+                        break
+                    }
                 }
             }
 

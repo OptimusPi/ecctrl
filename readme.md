@@ -90,7 +90,7 @@ const keyboardMap = [
 
 export function CharacterScene() {
   return (
-    <Physics>
+    <Physics timeStep="vary">
       <KeyboardControls map={keyboardMap}>
         <Ecctrl>
           <CharacterModel />
@@ -104,7 +104,7 @@ export function CharacterScene() {
 For custom gravity scenes, set Rapier gravity to `[0, 0, 0]` and let Ecctrl apply gravity per body:
 
 ```tsx
-<Physics gravity={[0, 0, 0]}>
+<Physics timeStep="vary" gravity={[0, 0, 0]}>
   <Ecctrl enableCustomGravity>
     <CharacterModel />
   </Ecctrl>
@@ -186,7 +186,7 @@ function GravitySetup() {
 
 export function Scene() {
   return (
-    <Physics gravity={[0, 0, 0]}>
+    <Physics timeStep="vary" gravity={[0, 0, 0]}>
       <GravitySetup />
       <Ecctrl enableCustomGravity>
         <CharacterModel />
@@ -640,7 +640,7 @@ You can drag points, drag tangents, or type exact values. If `leva` is not insta
 
 `TimeControl` manually steps Rapier. This is useful for pause, slow motion, bullet time, and deterministic example controls.
 
-Set `<Physics paused>` and let `TimeControl` step the world:
+Set `<Physics timeStep="vary" paused>` and let `TimeControl` step the world once per frame:
 
 ```tsx
 import { Physics } from "@react-three/rapier";
@@ -648,7 +648,7 @@ import { TimeControl } from "ecctrl/time";
 
 const timeScale = useRef(1);
 
-<Physics paused gravity={[0, 0, 0]}>
+<Physics timeStep="vary" paused gravity={[0, 0, 0]}>
   <TimeControl timeScale={timeScale} maxDelta={1 / 30} />
 </Physics>
 ```

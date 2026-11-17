@@ -47,6 +47,7 @@ import { CurveEditorPlugin } from "ecctrl/leva";
 - `JoystickProps` and `VirtualButtonProps` extend DOM attributes for typing compatibility, but the current components only consume the documented `id`, `label`, and style props.
 - Many handle values are live objects stored in refs. For example, `currPos` is a `THREE.Vector3` object that updates over time. Read it directly during `useFrame`; clone it if you need a persistent snapshot.
 - `readonly` runtime data is intended for reading. Use setter functions such as `setMovement`, `setTarget`, and `setGear` for control.
+- Ecctrl applies its impulses (character, wheels, propellers, custom gravity) once per rendered frame in `useFrame`, scaled by `world.timestep`. Use `<Physics timeStep="vary">` so Rapier takes exactly one step per frame. With the default fixed `1 / 60` step, frames and steps drift apart on displays faster or slower than 60 Hz and forces scale with frame rate.
 
 ## Ecctrl
 
@@ -440,8 +441,8 @@ Wheel suspension defaults target default-density vehicle bodies. For heavier veh
 | `latFrictionEllipseScale` | `number` | `1` | Lateral friction ellipse scale. |
 | `relaxLngRate` | `number` | `0.05` | Longitudinal tire relaxation rate. |
 | `relaxLatRate` | `number` | `0.1` | Lateral tire relaxation rate. |
-| `minLngRelaxCoeff` | `number` | `0.3` | Minimum longitudinal relaxation coefficient. |
-| `minLatRelaxCoeff` | `number` | `0.3` | Minimum lateral relaxation coefficient. |
+| `minLngRelaxRate` | `number` | `21.4` | Minimum longitudinal tire relaxation rate, per second. Per-step floor is `1 - exp(-rate * dt)`; `21.4` equals the old `0.3` per step at 60 Hz. |
+| `minLatRelaxRate` | `number` | `21.4` | Minimum lateral tire relaxation rate, per second. Per-step floor is `1 - exp(-rate * dt)`; `21.4` equals the old `0.3` per step at 60 Hz. |
 | `lngSlipRatioCurveData` | `CurveData` | `{ points: [{ x: 0, y: 0, r_out: 1.45 }, { x: 0.25, y: 1, r_in: 0, r_out: 0 }, { x: 1, y: 0.7, r_in: 0 }] }` | Longitudinal slip-to-grip curve. |
 | `latSlipRatioCurveData` | `CurveData` | `{ points: [{ x: 0, y: 0, r_out: 1.45 }, { x: 0.15, y: 1, r_in: 0, r_out: 0 }, { x: 1, y: 0.9, r_in: 0 }] }` | Lateral slip-to-grip curve. |
 | `followPlatform` | `boolean` | `true` | Subtracts contacted moving object velocity when computing wheel slip. |
@@ -454,7 +455,7 @@ Wheel suspension defaults target default-density vehicle bodies. For heavier veh
 | `wheelModelRadius` | `number` | `0.5` | Visual wheel radius used for model offset. |
 | `wheelModelLerpPosRate` | `number` | `10` | Visual suspension position smoothing. |
 | `wheelModelReversRotation` | `boolean` | `false` | Reverses visual wheel spin direction. Name keeps current source spelling. |
-| `debuggerArrowScale` | `number` | `10` | Scale for debug arrows. |
+| `debuggerArrowScale` | `number` | `10` | Scale for debug arrows. Blue draws wheel load in kg (support force / g); green and red draw the desired lateral and longitudinal friction impulse. None depend on step size. |
 
 ### WheelInfoType
 
@@ -475,7 +476,7 @@ Wheel suspension defaults target default-density vehicle bodies. For heavier veh
 | `lowVelThreshold`, `tireGripFactor` | `number` | Grip config. |
 | `lngFrictionEllipseScale`, `latFrictionEllipseScale` | `number` | Friction ellipse scaling. |
 | `relaxLngRate`, `relaxLatRate` | `number` | Tire relaxation rates. |
-| `minLngRelaxCoeff`, `minLatRelaxCoeff` | `number` | Minimum tire relaxation coefficients. |
+| `minLngRelaxRate`, `minLatRelaxRate` | `number` | Minimum tire relaxation rates, per second. |
 | `followPlatform` | `boolean` | Moving platform follow config. |
 | `applyCounterMass`, `applyCounterFriction` | `boolean` | Counter impulse config. |
 | `showWheelModel`, `wheelModelDensity`, `wheelModelUpdate` | various | Visual model config. |
@@ -674,12 +675,12 @@ Import:
 import { TimeControl, type TimeControlProps } from "ecctrl/time";
 ```
 
-Use `TimeControl` with `<Physics paused>` when you want manual physics stepping.
+Use `TimeControl` with `<Physics timeStep="vary" paused>` when you want manual physics stepping. Without `timeStep="vary"`, `step(dt)` feeds a fixed 1/60 accumulator and `paused` disables interpolation.
 
 ```tsx
 const timeScale = useRef(1);
 
-<Physics paused>
+<Physics timeStep="vary" paused>
   <TimeControl timeScale={timeScale} maxDelta={1 / 30} />
 </Physics>
 ```

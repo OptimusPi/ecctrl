@@ -452,8 +452,8 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                 latFrictionEllipseScale: { value: 1, step: 0.01, min: 0, max: 3 },
                 relaxLngRate: { value: 0.05, step: 0.001, min: 0.001, max: 0.1 },
                 relaxLatRate: { value: 0.1, step: 0.001, min: 0.001, max: 0.1 },
-                minLngRelaxCoeff: { value: 0.3, step: 0.01, min: 0, max: 1 },
-                minLatRelaxCoeff: { value: 0.3, step: 0.01, min: 0, max: 1 },
+                minLngRelaxRate: { value: 21.4, step: 0.1, min: 0, max: 120 },
+                minLatRelaxRate: { value: 21.4, step: 0.1, min: 0, max: 120 },
                 lngSlipRatioCurveData: CurveEditorPlugin({
                     points: [{ x: 0, y: 0, r_out: 1.45 }, { x: 0.25, y: 1, r_in: 0, r_out: 0 }, { x: 1, y: 0.7, r_in: 0 }],
                     samples: { value: 50, min: 2, max: 500, step: 1 },
@@ -558,8 +558,8 @@ export default function EcctrlWrapper({ paused = false, timeScale = 1 }: EcctrlW
                 latFrictionEllipseScale: { value: 1, step: 0.01, min: 0, max: 3 },
                 relaxLngRate: { value: 0.05, step: 0.001, min: 0.001, max: 0.1 },
                 relaxLatRate: { value: 0.1, step: 0.001, min: 0.001, max: 0.1 },
-                minLngRelaxCoeff: { value: 0.3, step: 0.01, min: 0, max: 1 },
-                minLatRelaxCoeff: { value: 0.3, step: 0.01, min: 0, max: 1 },
+                minLngRelaxRate: { value: 21.4, step: 0.1, min: 0, max: 120 },
+                minLatRelaxRate: { value: 21.4, step: 0.1, min: 0, max: 120 },
                 lngSlipRatioCurveData: CurveEditorPlugin({
                     points: [{ x: 0, y: 0, r_out: 1.45 }, { x: 0.25, y: 1, r_in: 0, r_out: 0 }, { x: 1, y: 0.7, r_in: 0 }],
                     samples: { value: 50, min: 2, max: 500, step: 1 },
